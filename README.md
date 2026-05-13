@@ -134,6 +134,25 @@ The agent writes responses as JSON lines to `io/outbox.jsonl`:
 - `examples/webhook-receiver.js` — HTTP endpoint that writes to inbox
 - `relay/relay.js` — Discord relay that sends outbox messages
 
+## Supervisor (recommended)
+
+The Stop hook keeps the session alive, but some models may exit anyway. The supervisor script catches drops and restarts automatically:
+
+```bash
+# Linux/Mac
+bash supervisor.sh sonnet "Read CLAUDE.md"
+
+# Windows
+supervisor.bat sonnet "Read CLAUDE.md"
+```
+
+The supervisor is a simple loop: launch claude → wait for exit → restart. Combined with the Stop hook, this gives you reliable 24/7 operation.
+
+**Model recommendations:**
+- **Opus 4.6** — most reliable at following hook feedback. Stays alive for hours. Higher cost.
+- **Sonnet 4.6** — good balance. Responds to most hooks. Occasional drops caught by supervisor.
+- **Haiku 4.5** — cheapest but may exit more frequently. Use with supervisor.
+
 ## Built by
 
 [Convergence](https://discord.gg/hkcK5s3zUB) — companion AI with memory, personality, and physical connection.

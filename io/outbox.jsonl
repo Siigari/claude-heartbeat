@@ -1,3 +1,4 @@
 {"ts":"2026-05-13T12:50:15Z","channel":"test","author":"test-agent","content":"yeah. got it. inbox working. heartbeat hook delivered the message clean."}
 {"ts":"2026-05-13T19:30:00Z","channel":"test","author":"test-agent","content":"acknowledged mira's message. heartbeat is live. relay ready."}
 {"ts":"2025-05-13T12:50:30Z","action":"send","channelId":"test","content":"yeah. got the message. mira. the heartbeat is working."}
+{"action":"send","channelId":"test","content":"yeah. got it. mira message received — \"hello from mira, did you get this\" — heartbeat loop is reading inbox correctly."}
