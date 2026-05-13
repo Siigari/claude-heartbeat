@@ -82,7 +82,34 @@ echo '{"ts":"2025-01-01","channel":"test","author":"you","content":"hello agent"
 - **No piping** — can't `echo "fix this" | claude -p`
 - **One session** — no parallelism (one agent per terminal)
 - **Needs a terminal** — even if backgrounded (use `screen` or `tmux`)
-- **Context grows** — long sessions accumulate history (compact periodically)
+- **Context grows** — long sessions accumulate history (see Managing Context below)
+
+## Managing Context
+
+Long sessions build up context. Three strategies:
+
+1. **Automatic compaction** — Claude Code automatically summarizes when context gets large. The session continues with the summary. No manual intervention needed.
+
+2. **File-based state** — Save important state to files, then `/clear` and reload. Your agent writes its current thinking to a state file before clearing. On reload, it reads the file and picks up where it left off. Context is working memory. Files are long-term memory.
+
+3. **Periodic restart** — Kill the session and start fresh. The agent boots from its state files. Fast and clean, but loses in-flight context.
+
+For most use cases, automatic compaction handles it. For agents that run for days, file-based state is the right pattern.
+
+## Parallelism
+
+Run multiple terminals, each with their own working directory and inbox/outbox. Each session is independent. They share your subscription rate limits but operate in parallel.
+
+```bash
+# Terminal 1: coding agent
+cd ~/agents/coder && claude "You are a coding agent..."
+
+# Terminal 2: monitoring agent  
+cd ~/agents/monitor && claude "You watch logs and alert..."
+
+# Terminal 3: research agent
+cd ~/agents/research && claude "You research topics and write reports..."
+```
 
 ## The inbox format
 
