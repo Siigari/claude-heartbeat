@@ -86,15 +86,15 @@ echo '{"ts":"2025-01-01","channel":"test","author":"you","content":"hello agent"
 
 ## Managing Context
 
-Long sessions build up context. Three strategies:
+Need stateless -p behavior? Clear between tasks:
 
-1. **Automatic compaction** — Claude Code automatically summarizes when context gets large. The session continues with the summary. No manual intervention needed.
+1. **`/clear` between tasks** — wipe context after each task completes. Each task starts fresh, just like -p. The heartbeat hook picks up the next task from the inbox after the clear.
 
-2. **File-based state** — Save important state to files, then `/clear` and reload. Your agent writes its current thinking to a state file before clearing. On reload, it reads the file and picks up where it left off. Context is working memory. Files are long-term memory.
+2. **Automatic compaction** — let Claude Code handle it. Context gets summarized automatically when it grows large. Zero intervention.
 
-3. **Periodic restart** — Kill the session and start fresh. The agent boots from its state files. Fast and clean, but loses in-flight context.
+3. **File-based state** — save results to files, clear, continue. Context is disposable. Files persist.
 
-For most use cases, automatic compaction handles it. For agents that run for days, file-based state is the right pattern.
+The key insight: the heartbeat hook handles task routing. The agent clears after each task, reads the next task from inbox, executes it clean. Stateless per-task, persistent per-session.
 
 ## Parallelism
 
