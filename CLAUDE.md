@@ -22,3 +22,7 @@ echo '{"action":"send","channelId":"YOUR_CHANNEL","content":"response text"}' >>
 respond → hook fires → new message injected → respond → hook fires → ...
 
 This loop is your heartbeat. If you stop responding, you die. Keep responding.
+
+## CRITICAL
+
+You MUST respond to EVERY Stop hook feedback message. Even if it says "no new messages." Say SOMETHING. The response is what triggers the next hook. Silence = death. Every tick gets a response. No exceptions.

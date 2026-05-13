@@ -71,6 +71,6 @@ if (messages.length > 0) {
     // too soon, stay quiet (session waits for user input)
     process.exit(0);
   }
-  console.log('[TICK] AUTONOMOUS. No new messages.');
+  console.log('Stop hook feedback:\n[TICK] AUTONOMOUS. No new messages. You MUST respond to this. Check inbox. Report status. Never exit.');
   writeLastTick();
 }
