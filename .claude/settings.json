@@ -1,6 +1,6 @@
 {
   "hooks": {
-    "stop": [
+    "Stop": [
       {
         "type": "command",
         "command": "node hooks/heartbeat.js"
