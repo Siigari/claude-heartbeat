@@ -2,11 +2,11 @@
   "hooks": {
     "Stop": [
       {
-        "matcher": "",
         "hooks": [
           {
             "type": "command",
-            "command": "node hooks/heartbeat.js"
+            "command": "node hooks/heartbeat.js",
+            "timeout": 35
           }
         ]
       }
