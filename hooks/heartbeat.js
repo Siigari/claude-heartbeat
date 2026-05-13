@@ -1,23 +1,32 @@
 #!/usr/bin/env node
-// heartbeat.js — keeps a claude code interactive session alive
-// reads new messages from io/inbox.jsonl and injects them into the conversation
-// prevents session timeout by always having pending input
+// heartbeat.js — stateless autonomous agent via stop hook
 //
-// install: add to .claude/settings.json hooks.stop array
-// that's it. the session stays alive.
+// Idle: blocks with minimal tick, session stays alive (cheap)
+// Message: blocks with message content, sets .responded flag
+// After response: sees flag → approves stop → session exits → supervisor restarts clean
+//
+// Result: each real message gets fresh context. Idle ticks cost ~20 tokens.
 //
 // env vars:
-//   HEARTBEAT_INTERVAL  minimum seconds between idle ticks (default: 0 = every response)
-//                       set to 60 for one tick/min, 300 for one every 5 min
-//                       messages from inbox are ALWAYS delivered regardless of interval
+//   HEARTBEAT_INTERVAL  minimum seconds between idle ticks (default: 60)
 
 const fs = require('fs');
 const path = require('path');
+const { execSync } = require('child_process');
 
-const INBOX = path.resolve(__dirname, '..', 'io', 'inbox.jsonl');
-const OFFSET_FILE = path.resolve(__dirname, '..', 'io', '.inbox-offset');
-const TICK_FILE = path.resolve(__dirname, '..', 'io', '.last-tick');
-const MIN_INTERVAL = parseInt(process.env.HEARTBEAT_INTERVAL || '0') * 1000;
+const CWD = path.resolve(__dirname, '..');
+const INBOX = path.join(CWD, 'io', 'inbox.jsonl');
+const OFFSET_FILE = path.join(CWD, 'io', '.inbox-offset');
+const LAST_TICK_FILE = path.join(CWD, 'io', '.last-tick');
+const RESPONDED_FLAG = path.join(CWD, 'io', '.responded');
+const RESTART_FLAG = path.join(CWD, 'io', '.restart');
+const IS_WIN = process.platform === 'win32';
+const MIN_INTERVAL = (parseInt(process.env.HEARTBEAT_INTERVAL || '60')) * 1000;
+
+function block(reason) {
+  process.stdout.write(JSON.stringify({ decision: 'block', reason }));
+  process.exit(0);
+}
 
 function readOffset() {
   try { return parseInt(fs.readFileSync(OFFSET_FILE, 'utf8').trim()) || 0; } catch { return 0; }
@@ -28,49 +37,97 @@ function writeOffset(n) {
 }
 
 function readLastTick() {
-  try { return parseInt(fs.readFileSync(TICK_FILE, 'utf8').trim()) || 0; } catch { return 0; }
+  try { return parseInt(fs.readFileSync(LAST_TICK_FILE, 'utf8').trim()) || 0; } catch { return 0; }
 }
 
 function writeLastTick() {
-  fs.writeFileSync(TICK_FILE, String(Date.now()));
+  fs.writeFileSync(LAST_TICK_FILE, String(Date.now()));
 }
 
-function getNewMessages() {
-  if (!fs.existsSync(INBOX)) return [];
-  const content = fs.readFileSync(INBOX, 'utf8');
-  const offset = readOffset();
-  if (content.length <= offset) return [];
+function checkInbox() {
+  try {
+    if (!fs.existsSync(INBOX)) return null;
+    const size = fs.statSync(INBOX).size;
+    const offset = readOffset();
+    if (size <= offset) return null;
 
-  const newContent = content.slice(offset);
-  writeOffset(content.length);
+    const buf = Buffer.alloc(size - offset);
+    const fd = fs.openSync(INBOX, 'r');
+    fs.readSync(fd, buf, 0, buf.length, offset);
+    fs.closeSync(fd);
 
-  return newContent.trim().split('\n').filter(Boolean).map(line => {
-    try { return JSON.parse(line); } catch { return null; }
-  }).filter(Boolean);
+    const raw = buf.toString('utf8');
+    const nlIndex = raw.indexOf('\n');
+    const line = nlIndex === -1 ? raw : raw.slice(0, nlIndex);
+    if (!line.trim()) return null;
+
+    // Advance offset by just this one line (+ newline if present)
+    writeOffset(offset + Buffer.byteLength(line, 'utf8') + (nlIndex === -1 ? 0 : 1));
+
+    try { return JSON.parse(line); } catch {
+      return { ts: new Date().toISOString(), channel: 'inbox', author: 'user', content: line.trim() };
+    }
+  } catch { return null; }
 }
 
-// main: check for new messages and output them as stop-hook feedback
-const messages = getNewMessages();
+function formatMessage(m) {
+  const time = new Date(m.ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const channel = m.channel || 'unknown';
+  const author = m.author || 'system';
+  const content = m.content || '';
+  return `[${time}] #${channel} ${author}: ${content}`;
+}
 
-if (messages.length > 0) {
-  // always deliver real messages regardless of interval
-  const formatted = messages.map(m => {
-    const time = new Date(m.ts).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-    const channel = m.channel || 'unknown';
-    const author = m.author || 'system';
-    const content = m.content || '';
-    return `[${time}] #${channel} ${author}: ${content}`;
-  }).join('\n');
+function sleepSecs(secs) {
+  try {
+    if (IS_WIN) {
+      execSync(`ping -n ${secs + 1} 127.0.0.1 > nul`, { timeout: (secs + 5) * 1000, windowsHide: true });
+    } else {
+      execSync(`sleep ${secs}`, { timeout: (secs + 5) * 1000 });
+    }
+  } catch {}
+}
 
-  console.log(formatted);
-  writeLastTick();
-} else {
-  // no messages — check interval before sending idle tick
-  const elapsed = Date.now() - readLastTick();
-  if (MIN_INTERVAL > 0 && elapsed < MIN_INTERVAL) {
-    // too soon, stay quiet (session waits for user input)
-    process.exit(0);
+const IDLE_TICK = '--- TURN START ---\n--- TURN END ---';
+
+// --- main ---
+
+// 0. Did the agent just respond to a real message? Signal restart for fresh context.
+//    But first check if another message is queued — process it before restarting.
+if (fs.existsSync(RESPONDED_FLAG)) {
+  fs.unlinkSync(RESPONDED_FLAG);
+  const next = checkInbox();
+  if (next) {
+    fs.writeFileSync(RESPONDED_FLAG, '');
+    block(formatMessage(next));
   }
-  console.log('Stop hook feedback:\n[TICK] AUTONOMOUS. No new messages. You MUST respond to this. Check inbox. Report status. Never exit.');
-  writeLastTick();
+  fs.writeFileSync(RESTART_FLAG, '');
+  block(IDLE_TICK);
 }
+
+// 1. Immediate inbox check — deliver one message
+const msg = checkInbox();
+if (msg) {
+  writeLastTick();
+  fs.writeFileSync(RESPONDED_FLAG, '');
+  block(formatMessage(msg));
+}
+
+// 2. No messages — check throttle
+const elapsed = Date.now() - readLastTick();
+if (elapsed < MIN_INTERVAL) {
+  sleepSecs(15);
+
+  const retryMsg = checkInbox();
+  if (retryMsg) {
+    writeLastTick();
+    fs.writeFileSync(RESPONDED_FLAG, '');
+    block(formatMessage(retryMsg));
+  }
+
+  block(IDLE_TICK);
+}
+
+// 3. Interval elapsed — send idle tick
+writeLastTick();
+block(IDLE_TICK);

@@ -13,6 +13,6 @@ while true; do
   echo "[SUPERVISOR] launching session..."
   claude --model "$MODEL" --dangerously-skip-permissions "$PROMPT"
   EXIT_CODE=$?
-  echo "[SUPERVISOR] session exited with code $EXIT_CODE. restarting in 5s..."
-  sleep 5
+  echo "[SUPERVISOR] session exited with code $EXIT_CODE. restarting in 2s..."
+  sleep 2
 done

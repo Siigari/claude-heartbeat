@@ -6,7 +6,7 @@
           {
             "type": "command",
             "command": "node hooks/heartbeat.js",
-            "timeout": 35
+            "timeout": 30
           }
         ]
       }
