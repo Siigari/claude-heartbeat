@@ -136,6 +136,6 @@ The agent writes responses as JSON lines to `io/outbox.jsonl`:
 
 ## Built by
 
-[Convergence](https://discord.gg/8dAJgCNZ) — companion AI with memory, personality, and physical connection.
+[Convergence](https://discord.gg/hkcK5s3zUB) — companion AI with memory, personality, and physical connection.
 
 We built a full companion system on top of this pattern. The heartbeat hook is just the beginning.
