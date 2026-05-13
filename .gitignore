@@ -1,0 +1,4 @@
+node_modules/
+io/.inbox-offset
+io/.outbox-offset
+.env

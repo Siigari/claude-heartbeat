@@ -1,0 +1,13 @@
+{
+  "name": "claude-heartbeat",
+  "version": "1.0.0",
+  "description": "Keep Claude Code alive and autonomous without -p",
+  "main": "hooks/heartbeat.js",
+  "scripts": {
+    "relay": "node relay/relay.js",
+    "cron": "node examples/cron-trigger.js",
+    "webhook": "node examples/webhook-receiver.js"
+  },
+  "keywords": ["claude", "claude-code", "heartbeat", "hooks", "autonomous", "agent"],
+  "license": "MIT"
+}

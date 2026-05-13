@@ -1,0 +1,10 @@
+{
+  "hooks": {
+    "stop": [
+      {
+        "type": "command",
+        "command": "node hooks/heartbeat.js"
+      }
+    ]
+  }
+}
