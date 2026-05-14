@@ -36,7 +36,7 @@ When the inbox is empty, the hook polls internally and blocks with minimal idle 
 ### 1. Clone
 
 ```bash
-git clone https://github.com/siliroid/claude-heartbeat.git
+git clone https://github.com/Siigari/claude-heartbeat.git
 cd claude-heartbeat
 ```
 
