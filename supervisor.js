@@ -114,11 +114,33 @@ function launch() {
   }, 2000);
   currentPoll = poll;
 
+  child.on('error', (err) => {
+    if (err.code === 'ENOENT') {
+      console.error('[SUPERVISOR] failed to start: `claude` CLI not found on PATH.');
+      console.error('[SUPERVISOR] install Claude Code: https://claude.com/code');
+    } else {
+      console.error(`[SUPERVISOR] failed to spawn claude: ${err.message}`);
+    }
+    clearInterval(poll);
+    currentChild = null;
+    currentPoll = null;
+    removePidFiles();
+    process.exit(1);
+  });
+
   child.on('exit', (code) => {
     clearInterval(poll);
     currentChild = null;
     currentPoll = null;
     try { fs.unlinkSync(CHILD_PID_FILE); } catch {}
+
+    // command-not-found: 127 from POSIX shells, 9009 from Windows cmd
+    if (code === 127 || code === 9009) {
+      console.error('[SUPERVISOR] `claude` CLI not found on PATH. install Claude Code: https://claude.com/code');
+      removePidFiles();
+      process.exit(1);
+    }
+
     console.log(`[SUPERVISOR] session exited (code ${code}). restarting in 2s...`);
     setTimeout(launch, 2000);
   });
