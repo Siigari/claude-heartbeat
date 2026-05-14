@@ -32,8 +32,15 @@ function readOffset() {
   try { return parseInt(fs.readFileSync(OFFSET_FILE, 'utf8').trim()) || 0; } catch { return 0; }
 }
 
+function writeSync(filepath, data) {
+  const fd = fs.openSync(filepath, 'w');
+  fs.writeSync(fd, data);
+  fs.fsyncSync(fd);
+  fs.closeSync(fd);
+}
+
 function writeOffset(n) {
-  fs.writeFileSync(OFFSET_FILE, String(n));
+  writeSync(OFFSET_FILE, String(n));
 }
 
 function readLastTick() {
@@ -41,7 +48,7 @@ function readLastTick() {
 }
 
 function writeLastTick() {
-  fs.writeFileSync(LAST_TICK_FILE, String(Date.now()));
+  writeSync(LAST_TICK_FILE, String(Date.now()));
 }
 
 function checkInbox() {
@@ -98,10 +105,10 @@ if (fs.existsSync(RESPONDED_FLAG)) {
   fs.unlinkSync(RESPONDED_FLAG);
   const next = checkInbox();
   if (next) {
-    fs.writeFileSync(RESPONDED_FLAG, '');
+    writeSync(RESPONDED_FLAG, '');
     block(formatMessage(next));
   }
-  fs.writeFileSync(RESTART_FLAG, '');
+  writeSync(RESTART_FLAG, '');
   block(IDLE_TICK);
 }
 
@@ -109,7 +116,7 @@ if (fs.existsSync(RESPONDED_FLAG)) {
 const msg = checkInbox();
 if (msg) {
   writeLastTick();
-  fs.writeFileSync(RESPONDED_FLAG, '');
+  writeSync(RESPONDED_FLAG, '');
   block(formatMessage(msg));
 }
 
@@ -121,7 +128,7 @@ if (elapsed < MIN_INTERVAL) {
   const retryMsg = checkInbox();
   if (retryMsg) {
     writeLastTick();
-    fs.writeFileSync(RESPONDED_FLAG, '');
+    writeSync(RESPONDED_FLAG, '');
     block(formatMessage(retryMsg));
   }
 

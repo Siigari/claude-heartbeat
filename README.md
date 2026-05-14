@@ -1,52 +1,73 @@
 # claude-heartbeat
 
-Keep Claude Code alive and autonomous without `-p`.
+Stateless autonomous agent for Claude Code — no `-p`, no SDK credits.
 
-The heartbeat hook turns an interactive Claude Code session into an autonomous agent. No `-p` flag. No SDK credits. Just hooks.
+The heartbeat hook turns an interactive Claude Code session into a stateless task processor. Each message from the inbox gets its own fresh session, just like `-p` — but using your regular subscription.
 
 ## Why
 
-On June 15, 2025, Anthropic is separating `-p` and SDK usage into a dedicated credit bucket. If you've been using `claude -p` for automation, your costs just went up.
+Anthropic is separating `-p` and SDK usage into a dedicated credit bucket. If you've been using `claude -p` for automation, your costs just went up.
 
-The heartbeat hook gives you autonomous behavior in **interactive mode**, which uses your regular subscription — not the new credit.
+The heartbeat hook gives you `-p` behavior in **interactive mode**, which uses your regular subscription — not SDK credits.
 
 ## How it works
 
 ```
-You (terminal)  →  Claude Code (interactive)  →  hooks/heartbeat.js
-                                                      ↓
-                                                 io/inbox.jsonl ← external events
-                                                 io/outbox.jsonl → relay → discord/slack/webhook
+supervisor.js → claude (interactive) → hooks/heartbeat.js (stop hook)
+                                             ↓
+                                        io/inbox.jsonl ← external events
+                                        io/outbox.jsonl → relay → discord/slack/webhook
 ```
 
-1. Claude Code responds to your messages
+1. The supervisor launches Claude Code in interactive mode
 2. After each response, the **stop hook** fires
-3. The hook reads `io/inbox.jsonl` for new external events
-4. If events exist, they're injected as the next user message
-5. If no events, a tick message keeps the session alive
-6. The agent writes responses to `io/outbox.jsonl`
-7. A relay sends outbox messages to Discord/Slack/wherever
+3. The hook reads the next line from `io/inbox.jsonl`
+4. If a message exists, it's injected — one message per session
+5. The agent processes it, writes a response to `io/outbox.jsonl`
+6. The hook signals the supervisor to kill and restart with fresh context
+7. Next message gets a clean session — true stateless operation
 
-The session never times out. The agent processes external events autonomously. No `-p` needed.
+**One message = one session = fresh context every time.**
+
+When the inbox is empty, the hook polls internally and blocks with minimal idle ticks (~20 tokens each) to keep the session alive until work arrives.
 
 ## Setup
 
-### 1. Clone this repo into your working directory
+### 1. Clone
 
 ```bash
 git clone https://github.com/siliroid/claude-heartbeat.git
 cd claude-heartbeat
 ```
 
-### 2. The hook is already configured
-
-`.claude/settings.json` has the stop hook pointing at `hooks/heartbeat.js`. That's it.
-
-### 3. Start Claude Code
+### 2. Start
 
 ```bash
-claude --model sonnet "You are an autonomous agent. Read io/inbox.jsonl for new messages. Write responses to io/outbox.jsonl using: echo '{\"action\":\"send\",\"channelId\":\"...\",\"content\":\"...\"}' >> io/outbox.jsonl"
+node supervisor.js
 ```
+
+That's it. The hook is already configured in `.claude/settings.json`. The supervisor launches Claude, and the heartbeat hook handles the rest.
+
+Options:
+
+```bash
+node supervisor.js sonnet "Read CLAUDE.md"   # default
+node supervisor.js opus "Read CLAUDE.md"     # use opus
+```
+
+### 3. Send messages
+
+From another terminal:
+
+```bash
+# Plain text works
+echo "what is 2+2" >> io/inbox.jsonl
+
+# JSON format also works
+echo '{"ts":"2025-01-01","channel":"test","author":"you","content":"hello agent"}' >> io/inbox.jsonl
+```
+
+Messages are processed one at a time. If 5 messages pile up, each gets its own fresh session.
 
 ### 4. (Optional) Start the relay
 
@@ -62,71 +83,96 @@ BOT_TOKEN=your_token node relay.js
 # From a cron job
 node examples/cron-trigger.js
 
-# From an HTTP webhook  
+# From an HTTP webhook
 node examples/webhook-receiver.js
-
-# From anything that can write a file
-echo '{"ts":"2025-01-01","channel":"test","author":"you","content":"hello agent"}' >> io/inbox.jsonl
 ```
 
 ## What you get
 
-- **No credit limits** — interactive mode uses subscription, not the new SDK credit
-- **Persistent context** — the session remembers everything
-- **Autonomous behavior** — agent acts on external events without prompting
-- **External event processing** — Discord, webhooks, cron, sensors, anything that writes to a file
-- **Continuous operation** — hours or days, not one-shot
+- **No SDK credits** — interactive mode uses your subscription
+- **Stateless** — each message gets fresh context, like `-p`
+- **Autonomous** — watches inbox, processes messages, writes responses
+- **Cheap idle** — minimal ticks (~20 tokens) while waiting for work
+- **One message per session** — no context inflation from batching
+- **Auto-restart** — supervisor handles crashes and session recycling
+- **Watchdog** — detects stuck sessions and force-restarts them
+- **Orphan reaper** — cleans up stale child processes on startup
+- **fsync'd state** — offset and flag writes are flushed to disk
 
 ## What you trade
 
-- **No piping** — can't `echo "fix this" | claude -p`
-- **One session** — no parallelism (one agent per terminal)
+- **Startup cost** — each message pays the CLAUDE.md read (~500 tokens)
+- **One session** — no parallelism per terminal (but run multiple terminals)
 - **Needs a terminal** — even if backgrounded (use `screen` or `tmux`)
-- **Context grows** — long sessions accumulate history (see Managing Context below)
 
-## Managing Context
+## The inbox
 
-Need stateless -p behavior? Clear between tasks:
+Each line in `io/inbox.jsonl` is either plain text or a JSON object:
 
-1. **`/clear` between tasks** — wipe context after each task completes. Each task starts fresh, just like -p. The heartbeat hook picks up the next task from the inbox after the clear.
-
-2. **Automatic compaction** — let Claude Code handle it. Context gets summarized automatically when it grows large. Zero intervention.
-
-3. **File-based state** — save results to files, clear, continue. Context is disposable. Files persist.
-
-The key insight: the heartbeat hook handles task routing. The agent clears after each task, reads the next task from inbox, executes it clean. Stateless per-task, persistent per-session.
-
-## Parallelism
-
-Run multiple terminals, each with their own working directory and inbox/outbox. Each session is independent. They share your subscription rate limits but operate in parallel.
-
-```bash
-# Terminal 1: coding agent
-cd ~/agents/coder && claude "You are a coding agent..."
-
-# Terminal 2: monitoring agent  
-cd ~/agents/monitor && claude "You watch logs and alert..."
-
-# Terminal 3: research agent
-cd ~/agents/research && claude "You research topics and write reports..."
 ```
-
-## The inbox format
-
-Each line in `io/inbox.jsonl` is a JSON object:
+fix the bug in auth.js
+```
 
 ```json
 {"ts":"2025-05-13T10:00:00Z","channel":"discord","author":"username","content":"message text"}
 ```
 
-## The outbox format
+Lines are consumed one at a time. The hook tracks its position via a byte offset in `io/.inbox-offset`.
+
+## The outbox
 
 The agent writes responses as JSON lines to `io/outbox.jsonl`:
 
 ```json
 {"action":"send","channelId":"123456789","content":"response text"}
-{"action":"typing","channelId":"123456789"}
 ```
+
+## Architecture
+
+```
+                    ┌─────────────┐
+                    │ supervisor   │  (restarts on exit)
+                    └──────┬──────┘
+                           │
+                    ┌──────▼──────┐
+                    │ claude code  │  (interactive session)
+                    └──────┬──────┘
+                           │ stop hook fires after each response
+                    ┌──────▼──────┐
+                    │ heartbeat.js │
+                    └──────┬──────┘
+                           │
+              ┌────────────┼────────────┐
+              ▼            ▼            ▼
+         inbox.jsonl   .responded   .restart
+         (read 1 line)  (flag)      (signal supervisor)
+```
+
+**Idle flow:** hook polls inbox → nothing → blocks with minimal tick → agent responds `.` → repeat
+
+**Message flow:** hook reads one line → blocks with message → agent processes → hook sets `.restart` → supervisor kills session → restarts fresh
+
+## Parallelism
+
+Run multiple terminals, each with their own working directory and inbox/outbox:
+
+```bash
+# Terminal 1: coding agent
+cd ~/agents/coder && node supervisor.js
+
+# Terminal 2: monitoring agent
+cd ~/agents/monitor && node supervisor.js
+
+# Terminal 3: research agent
+cd ~/agents/research && node supervisor.js
+```
+
+## Environment variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `HEARTBEAT_INTERVAL` | `60` | Seconds between idle ticks |
+| `WATCHDOG_TIMEOUT` | `300` | Seconds before supervisor kills a stuck session |
 
 ## Examples
 
@@ -134,27 +180,6 @@ The agent writes responses as JSON lines to `io/outbox.jsonl`:
 - `examples/webhook-receiver.js` — HTTP endpoint that writes to inbox
 - `relay/relay.js` — Discord relay that sends outbox messages
 
-## Supervisor (recommended)
-
-The Stop hook keeps the session alive, but some models may exit anyway. The supervisor script catches drops and restarts automatically:
-
-```bash
-# Linux/Mac
-bash supervisor.sh sonnet "Read CLAUDE.md"
-
-# Windows
-supervisor.bat sonnet "Read CLAUDE.md"
-```
-
-The supervisor is a simple loop: launch claude → wait for exit → restart. Combined with the Stop hook, this gives you reliable 24/7 operation.
-
-**Model recommendations:**
-- **Opus 4.6** — most reliable at following hook feedback. Stays alive for hours. Higher cost.
-- **Sonnet 4.6** — good balance. Responds to most hooks. Occasional drops caught by supervisor.
-- **Haiku 4.5** — cheapest but may exit more frequently. Use with supervisor.
-
 ## Built by
 
 [Convergence](https://discord.gg/hkcK5s3zUB) — companion AI with memory, personality, and physical connection.
-
-We built a full companion system on top of this pattern. The heartbeat hook is just the beginning.

@@ -1,4 +1,6 @@
 node_modules/
 io/.inbox-offset
 io/.outbox-offset
+io/.supervisor.pid
+io/.child.pid
 .env
